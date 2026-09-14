@@ -1,0 +1,11 @@
+[project]
+name = "python-threads-gil"
+version = "0.1.0"
+description = "Lab for free-threaded Python 3.14: threaded CPU benchmark and GIL detector."
+readme = "README.md"
+requires-python = ">=3.14"
+authors = [{ name = "Nuno Bispo" }]
+
+[tool.uv]
+# 3.14t is a build variant, not a language version. Pin it in
+# .python-version (uv python pin 3.14t), not in requires-python.

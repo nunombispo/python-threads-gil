@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gil-trap"
+version = "0.1.0"
+description = "Unmarked C extension that re-enables the GIL on free-threaded Python."
+requires-python = ">=3.14"
