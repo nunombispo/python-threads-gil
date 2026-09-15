@@ -13,9 +13,10 @@ This repo is the copy-paste lab: a stdlib-only threaded benchmark, a GIL detecto
 
 ```bash
 uv python install 3.14 3.14t
+uv python pin 3.14t
 ```
 
-`.python-version` pins `3.14t` so `uv run` in this project cannot silently fall back to the GIL build. `requires-python` in `pyproject.toml` stays `>=3.14` — the `t` suffix is a build variant, not a language version.
+`.python-version` pins `3.14+freethreaded` so `uv run` in this project cannot silently fall back to the GIL build. `requires-python` in `pyproject.toml` stays `>=3.14` — the `t` suffix is a build variant, not a language version.
 
 ## Run the benchmark
 
@@ -33,25 +34,25 @@ chmod +x run_lab.sh
 ./run_lab.sh
 ```
 
-The workload is pure-Python parse-and-fold on purpose. `hashlib` and NumPy can release the GIL internally, which would fake a speedup on default 3.14.
+The workload is pure-Python parse-and-fold on purpose. Libraries that drop the GIL from C would fake a speedup on default 3.14.
 
 ### Results on this machine
 
-4 vCPU Intel Xeon (KVM guest), Linux x86_64, CPython 3.14.7, 2,000,000 rows split across threads, best of 3:
+4 CPUs, CPython 3.14.5, 2,000,000 rows split across threads, best of 3:
 
 | Build | GIL | 1 thread | 4 threads | Speedup |
 | --- | --- | --- | --- | --- |
-| 3.14 (`3.14+gil`) | on | 1.024 s | 1.023 s | 1.00× |
-| 3.14t | off | 1.053 s | 0.262 s | 4.01× |
+| 3.14 (`3.14+gil`) | on | 1.210 s | 2.133 s | 0.57× |
+| 3.14t | off | 1.174 s | 0.320 s | 3.67× |
 
-Single-thread tax here: about 3%. CPython cites roughly 5–10% depending on platform and compiler. The 4× is this lab's ceiling: embarrassingly parallel, no shared mutable state. Real pipelines with contention will not look like this.
+Default 3.14: four threads were slower than one — contention for the lock. 3.14t: about 3.7× on four cores. That near-linear number is the lab ceiling (embarrassingly parallel, no shared mutable state), not a production promise.
 
 ## Audit imports
 
 ```bash
-uv run --python 3.14t python gil_detector.py
-uv run --python 3.14t python gil_detector.py json hashlib
-uv run --python 3.14t python gil_detector.py numpy pandas pydantic fastapi
+uv run --no-project --isolated --python 3.14t python gil_detector.py
+uv run --no-project --isolated --python 3.14t python gil_detector.py json hashlib
+uv run --no-project --isolated --python 3.14t python gil_detector.py numpy pandas pydantic fastapi
 ```
 
 On this machine, current NumPy, pandas, SciPy, Pydantic, and FastAPI stayed `gil_enabled=False` after import. That is not a lifetime guarantee. Pin versions and re-run the detector.
@@ -71,6 +72,8 @@ before imports               gil_enabled=False
 gil_trap                     gil_enabled=True  <-- GIL re-enabled
                              warning: The global interpreter lock (GIL) has been enabled to load module 'gil_trap' ...
 ```
+
+`PYTHON_GIL=0` after that warning is not a fix. The module told you it is not safe.
 
 Track ecosystem wheels at [py-free-threading](https://py-free-threading.github.io/tracking/) and [free-threaded wheels](https://hugovk.github.io/free-threaded-wheels/).
 
