@@ -2,7 +2,7 @@
 
 Python 3.14 made the free-threaded build officially supported. Nice changelog line.
 
-I installed `3.14t` the way you install anything you're excited about, way too fast, and with one bad assumption: that the build was enough.
+I installed `3.14t` the way I install anything I'm excited about — way too fast, and with one bad assumption: that the build was enough.
 
 `python -VV` said free-threading build. I spun up threads on a CPU-bound job and waited for the cores to light up. Wall time barely moved. Four threads, one core's worth of progress.
 
@@ -36,7 +36,12 @@ $ uv python pin 3.14t
 Pinned `.python-version` to `3.14+freethreaded`
 ```
 
-When I want the normal GIL build back for a comparison, I ask for it by name.
+When I want the normal GIL build back for a comparison, I ask for it by name. A pinned `3.14t` plus an existing `.venv` will swallow a vague `--python 3.14`, and I'll think I'm comparing when I'm not.
+
+```bash
+uv run --no-project --isolated --python 3.14+gil python benchmark.py
+uv run --no-project --isolated --python 3.14t python benchmark.py
+```
 
 ---
 
@@ -94,24 +99,17 @@ total rows      2,000,000  (split across threads)
        4       0.320     3.67x
 ```
 
-On my lab box (4 CPUs, CPython 3.14.5, two million rows, best of three):
+Default 3.14: four threads were slower than one (0.57×). Contention for the lock, not a free lunch. 3.14t: about 3.7× on four cores.
 
-| Build | GIL | 1 thread | 4 threads | Speedup |
-| --- | --- | --- | --- | --- |
-| 3.14 (`3.14+gil`) | on | 1.210 s | 2.133 s | 0.57× |
-| 3.14t | off | 1.174 s | 0.320 s | 3.67× |
+That speedup is the clean-lab ceiling, not a promise. This job shares nothing — no shared dict, no dataframe, no lock. Contention and native code that still serializes will pull real work toward 2×. If I see 1.1×, I'm paying a single-thread tax (often a few percent, sometimes closer to 10%) for nothing.
 
-Default 3.14: four threads were slower than one. Contention for the lock, not a free lunch.
-
-3.14t: about 3.7× on four cores. That one I shouldn't trust yet, and here's why.
-
-This job shares nothing. No shared dict, no dataframe, no lock. Near-linear scaling is the ceiling in a clean lab experiment, not a promise for production. Contention and native code that still serializes will pull you toward 2×. If you see 1.1×, you're paying a small single-thread cost for nothing.
+But the reason I still don't trust a fresh `3.14t` pin isn't bad scaling. It's quieter than that.
 
 ---
 
 ## The thing that ate my afternoon
 
-There's also a quieter check. The build can support free-threading and still be running with the GIL on. `python -VV` and a compile-time flag only tell you which interpreter you installed. `sys._is_gil_enabled()` tells you what's happening right now.
+The build can say free-threaded and still be running with the GIL on. `python -VV` and a compile-time flag only tell me which interpreter I installed. `sys._is_gil_enabled()` tells me what's happening right now.
 
 ```python
 import sys
@@ -142,9 +140,9 @@ for name in ["numpy", "pandas", "gil_trap"]:
                 print(" ", w.message)
 ```
 
-Start free-threaded. Import dependencies one by one. Watch for the flip.
+I start free-threaded. Import dependencies one by one. Watch for the flip.
 
-On the repo there is `trap/`: a tiny C extension that does no work and never declares itself safe. That's enough.
+This repo ships `trap/`: a tiny C extension that does no work and never declares itself safe. That's enough.
 
 ```bash
 $ uv run --no-project --isolated --python 3.14t --with ./trap python gil_detector.py gil_trap
@@ -157,16 +155,18 @@ Py_GIL_DISABLED 1
 before imports               gil_enabled=False
 
 gil_trap                     gil_enabled=True  <-- GIL re-enabled
-                             warning: The global interpreter lock (GIL) has been enabled to load module 'gil_trap', which has not declared that it can run safely without the GIL. To override this behavior and keep theGIL disabled (at your own risk), run with PYTHON_GIL=0 or -Xgil=0.
+                             warning: The global interpreter lock (GIL) has been enabled to load module 'gil_trap', which has not declared that it can run safely without the GIL. To override this behavior and keep the GIL disabled (at your own risk), run with PYTHON_GIL=0 or -Xgil=0.
 
 after all imports            gil_enabled=True
 ```
 
-`PYTHON_GIL=0` after that warning is not a fix. It is a dare. The module told you it is not safe. Believe it.
+`PYTHON_GIL=0` after that warning is not a fix. It's a dare. The module told me it isn't safe. I believe it.
 
-What about the stack I already run? On this machine, current NumPy, pandas, SciPy, Pydantic, and FastAPI imported clean, lock still off after each.
+I re-ran the benchmark after importing `gil_trap`. The 3.7× was gone — back to taking turns, same story as default 3.14.
 
-Having a free-threaded wheel isn't the same as scaling under threads either. Some paths still take their own locks. Async and I/O don't care much, the GIL was never what made `await` work. 
+What about the stack I already run? On this machine, current NumPy, pandas, SciPy, Pydantic, and FastAPI imported clean — lock still off after each. That's September 2026, these pins, this platform. Not a guarantee for next month or for the next machine.
+
+Having a free-threaded wheel isn't the same as scaling under threads either. Some paths still take their own locks. Async and I/O don't care much — the GIL was never what made `await` work. The thing that worried me was the private wheel, the pinned 18-month-old native module, the "works on 3.14" package that only shipped the normal build. I look for the `t` in the package tag and keep an eye on [py-free-threading](https://py-free-threading.github.io/tracking/) and [free-threaded wheels](https://hugovk.github.io/free-threaded-wheels/).
 
 ---
 
@@ -178,10 +178,8 @@ I stay off it for single-threaded CLIs too. A little slower, no parallelism, not
 
 I still reach for processes when isolation matters more than shared memory: crash domains, messy native code.
 
-I reach for `3.14t` when the work is CPU-bound Python that already shares memory awkwardly across processes: parallel transforms, image or PDF pipelines, batch work over local files. And only when I control the dependency set: a greenfield worker or a small internal tool, not the forty-wheel monolith I inherited.
+I reach for `3.14t` when the work is CPU-bound Python that already shares memory awkwardly across processes: parallel transforms, image or PDF pipelines, batch work over local files. And only when I control the dependency set: a greenfield worker or a small internal tool, not the forty-wheel monolith I inherited. Before I trust threads on that build, I run the detector on a cold start — and in CI — after every import that matters.
 
-Free-threading in 3.14 is real. On my lab box, four threads finished CPU-bound Python in a quarter of the time. It's also a different interpreter and a dependency veto. One unmarked native module and you're back to one core, with a warning that looks like noise.
+Free-threading in 3.14 is real. On my lab box, four threads finished that CPU job in about a third of the time. It's also a different interpreter and a dependency veto. One unmarked native module and I'm back to one core, with a warning that looks like noise.
 
-Try the lab on your hottest CPU path. Then tell me what broke it.
-
----
+Try the lab on your hottest CPU path. Then tell me what broke.
