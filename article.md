@@ -71,7 +71,7 @@ def wall_time(workers: int, total: int) -> float:
     return time.perf_counter() - started
 ```
 
-The full script in the repo prints interpreter metadata, repeats the run, and keeps the best wall time.
+The full script in [the lab repo](https://github.com/nunombispo/python-threads-gil-article) prints interpreter metadata, repeats the run, and keeps the best wall time.
 
 Let's now run the benchmark:
 
@@ -142,12 +142,12 @@ for name in ["numpy", "pandas", "gil_trap"]:
 
 I start free-threaded. Import dependencies one by one. Watch for the flip.
 
-This repo ships `trap/`: a tiny C extension that does no work and never declares itself safe. That's enough.
+The lab at [python-threads-gil-article](https://github.com/nunombispo/python-threads-gil-article) ships `trap/`: a tiny C extension that does no work and never declares itself safe. That's enough.
 
 ```bash
 $ uv run --no-project --isolated --python 3.14t --with ./trap python gil_detector.py gil_trap
 
-      Built gil-trap @ file:///home/nunobispo/GitHub/python-threads-gil/trap
+      Built gil-trap @ file:///.../python-threads-gil-article/trap
 Installed 1 package in 0.79ms
 Python          3.14.5 free-threading build (main, May 10 2026, 19:27:52) [Clang 22.1.3 ]
 Py_GIL_DISABLED 1
@@ -182,4 +182,4 @@ I reach for `3.14t` when the work is CPU-bound Python that already shares memory
 
 Free-threading in 3.14 is real. On my lab box, four threads finished that CPU job in about a third of the time. It's also a different interpreter and a dependency veto. One unmarked native module and I'm back to one core, with a warning that looks like noise.
 
-Try the lab on your hottest CPU path. Then tell me what broke.
+Try the [lab](https://github.com/nunombispo/python-threads-gil-article) on your hottest CPU path. Then tell me what broke.
